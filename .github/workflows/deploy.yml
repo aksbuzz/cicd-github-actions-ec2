@@ -86,7 +86,7 @@ jobs:
             mkdir -p $APP_DIR
 
             # Copy files from artifact to the environment-specific directory
-            rsync -av --delete ./deploy-package/ $APP_DIR/
+            rsync -av --delete deploy-package/ $APP_DIR/
             
             cd $APP_DIR
 
