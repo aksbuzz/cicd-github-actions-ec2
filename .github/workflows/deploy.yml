@@ -64,20 +64,20 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Deploy to EC2 using rsync
-        uses: easing-themes/rsync-deploy@v1
+      - name: Deploy to EC2
+        uses: easingthemes/ssh-deploy@main
         with:
-          # The private SSH key
+          # The private SSH key for the EC2 instance
           SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          # The local path of the artifact
-          local_path: ./deploy-package/
+          # The source directory from the artifact we downloaded
+          SOURCE: "./"
           # The remote host and user
           REMOTE_HOST: ${{ secrets.EC2_HOST }}
           REMOTE_USER: ${{ secrets.EC2_USER }}
-          # The remote path on the server
-          remote_path: /home/ec2-user/my-ts-app
-          # rsync options
-          ARGS: "-avz --delete"
+          # The target directory on the server
+          TARGET: /home/ec2-user/my-ts-app
+          # Arguments for rsync
+          ARGS: "-rltgoDzv --delete"
 
       - name: Run post-deployment commands
         uses: appleboy/ssh-action@master
@@ -87,5 +87,6 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd /home/ec2-user/my-ts-app
-            npm install --omit=dev --no-package-lock # Install only production dependencies
+            # We already brought over node_modules, so we just restart the app
+            # No need to npm install again on the server
             pm2 restart app || pm2 start dist/app.js --name "app"
