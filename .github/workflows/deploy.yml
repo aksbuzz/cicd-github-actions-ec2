@@ -1,0 +1,91 @@
+name: Build, Test, and Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # Job 1: Build and test the application
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Run Tests
+        run: npm test
+
+      - name: Create deployment package
+        run: |
+          mkdir deploy-package
+          cp -R dist deploy-package/
+          cp -R node_modules deploy-package/
+          cp package.json deploy-package/
+          cp package-lock.json deploy-package/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-package
+          path: deploy-package
+
+  # Job 2: Deploy the application to EC2
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-test # This job depends on the success of the first one
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: deployment-package
+          path: deploy-package
+
+      # This step authenticates with AWS, even though we use SSH for the deploy.
+      # It's good practice and makes the workflow ready for any future AWS CLI commands.
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to EC2 using rsync
+        uses: easing-themes/rsync-deploy@v1
+        with:
+          # The private SSH key
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          # The local path of the artifact
+          local_path: ./deploy-package/
+          # The remote host and user
+          REMOTE_HOST: ${{ secrets.EC2_HOST }}
+          REMOTE_USER: ${{ secrets.EC2_USER }}
+          # The remote path on the server
+          remote_path: /home/ec2-user/my-ts-app
+          # rsync options
+          ARGS: "-avz --delete"
+
+      - name: Run post-deployment commands
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ec2-user/my-ts-app
+            npm install --omit=dev --no-package-lock # Install only production dependencies
+            pm2 restart app || pm2 start dist/app.js --name "app"
