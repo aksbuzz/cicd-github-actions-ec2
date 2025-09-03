@@ -1,1 +1,3 @@
-Also, how to add multiple environments like dev, test, prod. What if we want to connect a postgres RDS DB? For simplicity we will use same instance but use different DB for each environment. Also use some migration step as well. 
+Readme:
+
+TODO

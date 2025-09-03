@@ -4,13 +4,17 @@ on:
   push:
     branches:
       - main
+      - dev
+      - 'release/**'
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  # Job 1: Build and test the application
+  # -------------------------
+  # Job 1: Build and test
+  # -------------------------
   build-and-test:
     runs-on: ubuntu-latest
     steps:
@@ -21,6 +25,7 @@ jobs:
         uses: actions/setup-node@v3.9.1
         with:
           node-version: '22'
+          cache: 'npm'
 
       - name: Install Dependencies
         run: npm ci
@@ -35,7 +40,8 @@ jobs:
         run: |
           mkdir deploy-package
           cp -R dist deploy-package/
-          cp -R node_modules deploy-package/
+          cp -R migrations deploy-package/
+          cp knexfile.js deploy-package/
           cp package.json deploy-package/
           cp package-lock.json deploy-package/
 
@@ -45,10 +51,16 @@ jobs:
           name: deployment-package
           path: deploy-package
 
-  # Job 2: Deploy the application to EC2
+  # -------------------------
+  # Job 2: Deploy to EC2
+  # -------------------------
   deploy:
     runs-on: ubuntu-latest
-    needs: build-and-test # This job depends on the success of the first one
+    needs: build-and-test
+    
+    environment:
+      name: ${{ (github.ref == 'refs/heads/main' && 'prod') || (startsWith(github.ref, 'refs/heads/release/') && 'test') || 'dev' }}
+    
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v5.0.0
@@ -56,8 +68,6 @@ jobs:
           name: deployment-package
           path: deploy-package
 
-      # This step authenticates with AWS, even though we use SSH for the deploy.
-      # It's good practice and makes the workflow ready for any future AWS CLI commands.
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4.3.1
         with:
@@ -67,16 +77,11 @@ jobs:
       - name: Deploy to EC2
         uses: easingthemes/ssh-deploy@main
         with:
-          # The private SSH key for the EC2 instance
           SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          # The source directory from the artifact we downloaded
           SOURCE: "deploy-package/"
-          # The remote host and user
           REMOTE_HOST: ${{ secrets.EC2_HOST }}
           REMOTE_USER: ${{ secrets.EC2_USER }}
-          # The target directory on the server
           TARGET: /home/ec2-user/my-ts-app
-          # Arguments for rsync
           ARGS: "-rltgoDzv --delete"
 
       - name: Run post-deployment commands
@@ -86,7 +91,23 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /home/ec2-user/my-ts-app
-            # We already brought over node_modules, so we just restart the app
-            # No need to npm install again on the server
-            pm2 restart app || pm2 start dist/app.js --name "app"
+            set -e # Exit immediately if a command exits with a non-zero status
+
+            # Detect environment
+            ENV_NAME=${{ (github.ref == 'refs/heads/main' && 'prod') || (startsWith(github.ref, 'refs/heads/release/') && 'test') || 'dev' }}
+
+            APP_DIR="/home/ec2-user/my-ts-app-$ENV_NAME"
+            echo "Deploying to $APP_DIR..."
+            
+            mkdir -p $APP_DIR
+            rsync -a --delete /home/ec2-user/my-ts-app/ $APP_DIR/
+
+            cd $APP_DIR
+
+            echo "${{ vars.ENV_FILE_CONTENT }}" > .env
+
+            npm install --omit=dev --no-audit --no-fund
+
+            npx knex migrate:latest
+
+            pm2 restart app-$ENV_NAME || pm2 start dist/app.js --name "app-$ENV_NAME"
