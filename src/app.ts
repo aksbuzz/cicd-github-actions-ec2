@@ -8,7 +8,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.send(`Hello from the ${process.env.NODE_ENV || 'unknown'} environment!`);
+  res.send(`Hello, World!`);
 });
 
 app.get('/users', async (req, res) => {
