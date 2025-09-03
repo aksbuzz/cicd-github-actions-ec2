@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - dev
-      - 'releases/**'
+      - 'release/**'
 
 permissions:
   id-token: write
@@ -94,13 +94,7 @@ jobs:
             set -e # Exit immediately if a command exits with a non-zero status
 
             # Detect environment
-            if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
-              ENV_NAME="prod"
-            elif [[ "${GITHUB_REF}" == refs/heads/releases/* ]]; then
-              ENV_NAME="test"
-            else
-              ENV_NAME="dev"
-            fi
+            ENV_NAME=${{ (github.ref == 'refs/heads/main' && 'prod') || (startsWith(github.ref, 'refs/heads/release/') && 'test') || 'dev' }}
 
             APP_DIR="/home/ec2-user/my-ts-app-$ENV_NAME"
             echo "Deploying to $APP_DIR..."
