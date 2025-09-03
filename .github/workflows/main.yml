@@ -1,0 +1,96 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  
+  pull_request:
+    branches:
+      - main
+      - dev
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # -------------------------
+  # Job 1: Build and test
+  # -------------------------
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3.9.1
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Run Tests
+        run: npm test
+
+      - name: Create and upload artifact
+        if: github.event_name == 'push'
+        run: |
+          mkdir deploy-package
+          cp -R dist deploy-package/
+          cp -R migrations deploy-package/
+          cp knexfile.js deploy-package/
+          cp package.json deploy-package/
+          cp package-lock.json deploy-package/
+        
+      - name: Upload artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: deployment-package
+          path: deploy-package
+
+  deploy-dev:
+  # -------------------------
+  # Job 2: Deploy to Dev
+  # -------------------------
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs: build-and-test
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment-name: dev
+      app-directory: /home/ec2-user/my-ts-app-dev
+      pm2-app-name: app-dev
+    secrets:
+      ENV_FILE_CONTENTS: ${{ vars.DEV_ENV_FILE_CONTENTS }}
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      AWS_ROLE_TO_ASSUME_ARN: ${{ secrets.AWS_ROLE_TO_ASSUME_ARN }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+
+  deploy-prod:
+  # -------------------------
+  # Job 3: Deploy to Prod
+  # -------------------------
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build-and-test
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment-name: prod
+      app-directory: /home/ec2-user/my-ts-app-prod
+      pm2-app-name: app-prod
+    secrets:
+      ENV_FILE_CONTENTS: ${{ vars.PROD_ENV_FILE_CONTENTS }}
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      AWS_ROLE_TO_ASSUME_ARN: ${{ secrets.AWS_ROLE_TO_ASSUME_ARN }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
