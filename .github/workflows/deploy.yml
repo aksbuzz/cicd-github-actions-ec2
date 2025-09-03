@@ -15,10 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5.0.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v3.9.1
         with:
           node-version: '22'
 
@@ -40,7 +40,7 @@ jobs:
           cp package-lock.json deploy-package/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: deployment-package
           path: deploy-package
@@ -51,7 +51,7 @@ jobs:
     needs: build-and-test # This job depends on the success of the first one
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v5.0.0
         with:
           name: deployment-package
           path: deploy-package
@@ -59,7 +59,7 @@ jobs:
       # This step authenticates with AWS, even though we use SSH for the deploy.
       # It's good practice and makes the workflow ready for any future AWS CLI commands.
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4.3.1
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
