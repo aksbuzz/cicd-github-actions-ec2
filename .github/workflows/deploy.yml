@@ -116,7 +116,4 @@ jobs:
 
             npx knex migrate:latest
 
-            pm2 startOrRestart ecosystem.config.js --only app-$ENV_NAME || \
-              pm2 start dist/app.js --name "app-$ENV_NAME"
-
-            pm2 save
+            pm2 restart app-$ENV_NAME || pm2 start dist/app.js --name "app-$ENV_NAME"
