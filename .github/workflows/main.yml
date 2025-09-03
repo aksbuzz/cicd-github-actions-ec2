@@ -88,7 +88,7 @@ jobs:
       app-directory: /home/ec2-user/my-ts-app-prod
       pm2-app-name: app-prod
     secrets:
-      ENV_FILE_CONTENTS: ${{ var.PROD_ENV_FILE_CONTENTS }}
+      ENV_FILE_CONTENTS: ${{ vars.PROD_ENV_FILE_CONTENTS }}
       EC2_HOST: ${{ secrets.EC2_HOST }}
       EC2_USER: ${{ secrets.EC2_USER }}
       EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
