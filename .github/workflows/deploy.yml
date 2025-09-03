@@ -39,7 +39,6 @@ jobs:
           cp -R dist deploy-package/
           cp -R migrations deploy-package/
           cp knexfile.js deploy-package/
-          cp -R node_modules deploy-package/
           cp package.json deploy-package/
           cp package-lock.json deploy-package/
 
@@ -73,21 +72,6 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Deploy to EC2
-        uses: easingthemes/ssh-deploy@main
-        with:
-          # The private SSH key for the EC2 instance
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          # The source directory from the artifact we downloaded
-          SOURCE: "deploy-package/"
-          # The remote host and user
-          REMOTE_HOST: ${{ secrets.EC2_HOST }}
-          REMOTE_USER: ${{ secrets.EC2_USER }}
-          # The target directory on the server
-          TARGET: /home/ec2-user/my-ts-app
-          # Arguments for rsync
-          ARGS: "-rltgoDzv --delete"
-
-      - name: Run post-deployment commands
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -101,17 +85,18 @@ jobs:
             APP_DIR="/home/ec2-user/my-ts-app-$ENV_NAME"
             mkdir -p $APP_DIR
 
-            # Move the app files into the new directory
-            mv /home/ec2-user/my-ts-app/* $APP_DIR/
-            
-            # Remove the old app directory
-            rm -rf /home/ec2-user/my-ts-app
+            # Copy files from artifact to the environment-specific directory
+            rsync -av --delete ./deploy-package/ $APP_DIR/
             
             cd $APP_DIR
 
             echo "${{ secrets.ENV_FILE_CONTENTS }}" > .env
 
+            # Install production dependencies
+            npm install --omit=dev --no-package-lock
+
             # Run database migrations
             npx knex migrate:latest
-
+            
+            # Restart the app with a unique name for this environment
             pm2 restart app-$ENV_NAME || pm2 start dist/app.js --name "app-$ENV_NAME"
